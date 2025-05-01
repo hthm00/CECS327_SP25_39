@@ -79,30 +79,6 @@ The application settings are managed through the `config.py` file:
    - Sensor configurations
    - Conversion factors and constants
 
-## Security Notes
-
-- Never commit your `config.py` file to version control
-- Keep your MongoDB connection string secure
-- Consider using environment variables for sensitive credentials
-- Ensure proper network security measures are in place
-- The `config.py` file is automatically ignored by git
-
-## Error Handling
-
-The server provides informative error messages for:
-- Invalid port numbers
-- Connection issues
-- Missing or invalid data
-- Database connection problems
-
-## Contributing
-
-1. Fork the repository
-2. Create a feature branch
-3. Commit your changes
-4. Push to the branch
-5. Create a Pull Request
-
 ## License
 
 This project is licensed under the MIT License - see the LICENSE file for details.
