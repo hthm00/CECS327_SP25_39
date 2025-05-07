@@ -10,7 +10,7 @@ myTCPSocket.connect((host, port))
 def toServer(query):
     myTCPSocket.send(query.encode('utf-8'))
     response = myTCPSocket.recv(1024).decode('utf-8')
-    print("Server responded:", response)
+    print(response)
 
 while True:
     print("""1. What is the average moisture inside my kitchen fridge in the past three hours?
