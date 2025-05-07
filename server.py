@@ -6,24 +6,65 @@ from config import NEONDB_CONNECTION_STRING, SENSOR_CONFIG, DEVICE_IDS
 
 
 def relative_moisture(record):
+    """
+    Calculates relative moisture percentage from sensor reading.
+    
+    Args:
+        record (dict): A single record from the database, containing 'payload' with sensor values.
+
+    Returns:
+        float: Moisture percentage (0–100).
+    """
     sensor_key = SENSOR_CONFIG["MOISTURE"]["SENSOR_KEY"]
     max_val = SENSOR_CONFIG["MOISTURE"]["MAX_VALUE"]
     value = float(record["payload"].get(sensor_key, 0))
     return (value / max_val) * 100
 
+
 def water_flow_gallons(record):
+    """
+    Converts raw water flow sensor reading into gallons per hour.
+
+    Args:
+        record (dict): A single record from the database, containing 'payload' with sensor values.
+
+    Returns:
+        float: Estimated gallons used in an hour.
+    """
     cfg = SENSOR_CONFIG["WATER_FLOW"]
     raw = float(record["payload"].get(cfg["SENSOR_KEY"], 0))
     flow_lpm = (raw / 100) * cfg["MAX_FLOW_RATE_LPM"]
-    return flow_lpm * cfg["CONVERSION_FACTOR"] * 60
+    return flow_lpm * cfg["CONVERSION_FACTOR"] * 60  # gallons per hour
+
 
 def amperes_to_kilowatts(record, device_key):
+    """
+    Calculates energy consumption in kilowatts for a given device from amperes.
+
+    Args:
+        record (dict): A single record from the database.
+        device_key (str): One of 'FRIDGE1', 'DISHWASHER', 'FRIDGE2'.
+
+    Returns:
+        float: Energy consumption in kilowatts.
+    """
     cfg = SENSOR_CONFIG["ELECTRICITY"]
     sensor_key = cfg["SENSOR_KEYS"][device_key]
     amps = float(record["payload"].get(sensor_key, 0))
     return (amps * cfg["VOLTAGE"] * cfg["HOURS"]) / 1000
 
+
 def handle_request(request, data):
+    """
+    Handles client requests by computing the appropriate sensor data summary.
+
+    Args:
+        request (str): The client request type ("1", "2", or "3").
+        data (dict): Dictionary mapping device IDs to lists of sensor records.
+
+    Returns:
+        str: A human-readable summary of the computed data.
+    """
     if request == "1":  # Moisture
         key = DEVICE_IDS["FRIDGE1"]
         values = [relative_moisture(r) for r in data.get(key, [])]
@@ -57,7 +98,17 @@ def handle_request(request, data):
 
     return "Invalid request or no data available."
 
+
 def get_recent_sensor_data(hours=3):
+    """
+    Queries the database for recent sensor data from the past `hours`.
+
+    Args:
+        hours (int): Time window in hours to retrieve recent sensor readings.
+
+    Returns:
+        dict: Mapping of device UIDs to lists of records (dicts with payload and timestamp).
+    """
     cutoff = datetime.now() - timedelta(hours=hours)
     query = """
         SELECT payload, time
@@ -76,7 +127,11 @@ def get_recent_sensor_data(hours=3):
             data[uid].append({"payload": payload, "time": timestamp})
     return data
 
+
 def start_server():
+    """
+    Starts the TCP server to handle client connections and respond to sensor data queries.
+    """
     server_ip = input("Enter server IP address: ")
     server_port = int(input("Enter the port number: "))
 
@@ -107,6 +162,7 @@ def start_server():
                         conn.sendall(error_msg.encode('utf-8'))
 
             print("Connection closed.")
+
 
 if __name__ == "__main__":
     start_server()
