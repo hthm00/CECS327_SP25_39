@@ -1,6 +1,5 @@
 import socket
 import psycopg2
-import json
 from datetime import datetime, timedelta
 from collections import defaultdict
 
