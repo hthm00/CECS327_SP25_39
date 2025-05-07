@@ -1,51 +1,20 @@
-"""
-Server implementation for handling IoT device data processing and analysis.
-This server connects to a MongoDB database and processes data from various household devices
-including moisture sensors, water flow meters, and electricity consumption meters.
-"""
-
 import socket
 import psycopg2
 import json
 from datetime import datetime, timedelta
 from collections import defaultdict
-from config import (
-    MONGODB_CONNECTION_STRING,
-    MONGODB_DATABASE,
-    MONGODB_COLLECTION,
-    DEVICE_IDS,
-    SENSOR_CONFIG
-)
 
 def relative_moisture_process(data):
-    """
-    Process raw moisture data to calculate relative moisture percentage.
-    
-    Args:
-        data (dict): Dictionary containing raw moisture sensor data
-        
-    Returns:
-        float: Relative moisture percentage (0-100)
-    """
-    max_val = SENSOR_CONFIG["MOISTURE"]["MAX_VALUE"]
-    raw_moisture = float(data["payload"][SENSOR_CONFIG["MOISTURE"]["SENSOR_KEY"]])
+    max_val = 999
+    raw_moisture = float(data["payload"]["Moisture Meter - MoistureMeter"])
     relative_moisture = (raw_moisture / max_val) * 100
     return relative_moisture
 
 def water_flow_gallons_process(data):
-    """
-    Process raw water flow data to calculate gallons per hour.
-    
-    Args:
-        data (dict): Dictionary containing raw water flow sensor data
-        
-    Returns:
-        float: Water flow in gallons per hour
-    """
-    max_flow_rate_lpm = SENSOR_CONFIG["WATER_FLOW"]["MAX_FLOW_RATE_LPM"]
-    raw_water_flow = float(data["payload"].get(SENSOR_CONFIG["WATER_FLOW"]["SENSOR_KEY"], 0))
+    max_flow_rate_lpm = 10
+    raw_water_flow = float(data["payload"].get("WaterConsumptionSensor", 0))
     flow_rate_lpm = (raw_water_flow / 100) * max_flow_rate_lpm
-    flow_rate_gpm = flow_rate_lpm * SENSOR_CONFIG["WATER_FLOW"]["CONVERSION_FACTOR"]
+    flow_rate_gpm = flow_rate_lpm * 0.264172
     gallons = flow_rate_gpm * 60
     return gallons
 
@@ -84,7 +53,6 @@ def get_data_from_neon(cursor, cutoff):
 
 def start_server():
     try:
-        # Get server configuration from user
         server_ip = input("Enter server IP address: ")
         server_port = int(input("Enter the port number: "))
         server_socket = socket.socket(socket.AF_INET, socket.SOCK_STREAM)
@@ -94,7 +62,6 @@ def start_server():
         print(f"Listening on {server_ip}:{server_port}")
 
         while True:
-            # Accept client connection
             conn, addr = server_socket.accept()
             print("Connected")
 
