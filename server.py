@@ -1,137 +1,112 @@
 import socket
-import psycopg2
 from datetime import datetime, timedelta
+import psycopg2
 from collections import defaultdict
+from config import NEONDB_CONNECTION_STRING, SENSOR_CONFIG, DEVICE_IDS
 
-def relative_moisture_process(data):
-    max_val = 999
-    raw_moisture = float(data["payload"]["Moisture Meter - MoistureMeter"])
-    relative_moisture = (raw_moisture / max_val) * 100
-    return relative_moisture
 
-def water_flow_gallons_process(data):
-    max_flow_rate_lpm = 10
-    raw_water_flow = float(data["payload"].get("WaterConsumptionSensor", 0))
-    flow_rate_lpm = (raw_water_flow / 100) * max_flow_rate_lpm
-    flow_rate_gpm = flow_rate_lpm * 0.264172
-    gallons = flow_rate_gpm * 60
-    return gallons
+def relative_moisture(record):
+    sensor_key = SENSOR_CONFIG["MOISTURE"]["SENSOR_KEY"]
+    max_val = SENSOR_CONFIG["MOISTURE"]["MAX_VALUE"]
+    value = float(record["payload"].get(sensor_key, 0))
+    return (value / max_val) * 100
 
-def amperes_to_kilowatts_process(data, key):
-    hours = 1
-    voltage = 240
-    if key == "09h-o4h-6ec-q99":
-        amperes = float(data["payload"].get("Ammeter", 0))
-    elif key == "0a4-g7y-3jy-4w0":
-        amperes = float(data["payload"].get("Ammeter2", 0))
-    else:
-        amperes = float(data["payload"].get("Ammeter1", 0))
-    power_watts = amperes * voltage
-    kilowatts = (power_watts * hours) / 1000
-    return kilowatts
+def water_flow_gallons(record):
+    cfg = SENSOR_CONFIG["WATER_FLOW"]
+    raw = float(record["payload"].get(cfg["SENSOR_KEY"], 0))
+    flow_lpm = (raw / 100) * cfg["MAX_FLOW_RATE_LPM"]
+    return flow_lpm * cfg["CONVERSION_FACTOR"] * 60
 
-def get_data_from_neon(cursor, cutoff):
+def amperes_to_kilowatts(record, device_key):
+    cfg = SENSOR_CONFIG["ELECTRICITY"]
+    sensor_key = cfg["SENSOR_KEYS"][device_key]
+    amps = float(record["payload"].get(sensor_key, 0))
+    return (amps * cfg["VOLTAGE"] * cfg["HOURS"]) / 1000
+
+def handle_request(request, data):
+    if request == "1":  # Moisture
+        key = DEVICE_IDS["FRIDGE1"]
+        values = [relative_moisture(r) for r in data.get(key, [])]
+        if values:
+            avg = sum(values) / len(values)
+            return f"The average moisture is: {avg:.2f}"
+
+    elif request == "2":  # Water Flow
+        key = DEVICE_IDS["DISHWASHER"]
+        values = [water_flow_gallons(r) for r in data.get(key, [])]
+        if values:
+            avg = sum(values) / len(values)
+            return f"The average water flow is: {avg:.2f}"
+
+    elif request == "3":  # Electricity
+        consumption = {}
+        labels = {
+            "FRIDGE1": "the first fridge",
+            "DISHWASHER": "the dishwasher",
+            "FRIDGE2": "the second fridge"
+        }
+        for label, key in DEVICE_IDS.items():
+            records = data.get(key, [])
+            values = [amperes_to_kilowatts(r, label) for r in records]
+            if values:
+                consumption[label] = sum(values) / len(values)
+
+        if consumption:
+            max_device = max(consumption, key=consumption.get)
+            return f"The maximum electricity consumption is: {labels[max_device]} with {consumption[max_device]:.2f} kilowatts."
+
+    return "Invalid request or no data available."
+
+def get_recent_sensor_data(hours=3):
+    cutoff = datetime.now() - timedelta(hours=hours)
     query = """
         SELECT payload, time
         FROM "Table_virtual"
         WHERE time > %s
     """
-    cursor.execute(query, (cutoff,))
-    rows = cursor.fetchall()
+    with psycopg2.connect(NEONDB_CONNECTION_STRING) as conn:
+        with conn.cursor() as cursor:
+            cursor.execute(query, (cutoff,))
+            rows = cursor.fetchall()
 
     data = defaultdict(list)
-    for payload, time in rows:
-        record = {
-            "payload": payload,
-            "time": time
-        }
+    for payload, timestamp in rows:
         uid = payload.get("parent_asset_uid")
         if uid:
-            data[uid].append(record)
+            data[uid].append({"payload": payload, "time": timestamp})
     return data
 
 def start_server():
-    try:
-        server_ip = input("Enter server IP address: ")
-        server_port = int(input("Enter the port number: "))
-        server_socket = socket.socket(socket.AF_INET, socket.SOCK_STREAM)
+    server_ip = input("Enter server IP address: ")
+    server_port = int(input("Enter the port number: "))
+
+    with socket.socket(socket.AF_INET, socket.SOCK_STREAM) as server_socket:
         server_socket.bind((server_ip, server_port))
         server_socket.listen(1)
-
         print(f"Listening on {server_ip}:{server_port}")
 
         while True:
             conn, addr = server_socket.accept()
-            print("Connected")
+            print(f"Connected from {addr}")
 
-            while True:
-                data = conn.recv(1024)
-                if not data:
-                    break
+            with conn:
+                while True:
+                    data = conn.recv(1024)
+                    if not data:
+                        break
+                    request = data.decode().strip()
+                    print(f"Received: {request}")
 
-                request = data.decode()
-                print(f"Received: {request}")
+                    try:
+                        sensor_data = get_recent_sensor_data()
+                        response = handle_request(request, sensor_data)
+                        conn.sendall(response.encode('utf-8'))
+                    except Exception as e:
+                        error_msg = f"Error: {e}"
+                        print(error_msg)
+                        conn.sendall(error_msg.encode('utf-8'))
 
-                try:
-                    # Connect to NeonDB (PostgreSQL)
-                    conn_str = "postgresql://neondb_owner:npg_PDG5yHtwd9ig@ep-dark-glade-a4y5rfkw-pooler.us-east-1.aws.neon.tech/neondb?sslmode=require"
-                    with psycopg2.connect(conn_str) as db_conn:
-                        with db_conn.cursor() as cursor:
-                            cutoff = datetime.now() - timedelta(hours=3)
-                            data = get_data_from_neon(cursor, cutoff)
-
-                            match request:
-                                case "1":
-                                    key = "09h-o4h-6ec-q99"
-                                    records = data.get(key, [])
-                                    moisture_values = [
-                                        relative_moisture_process(r) for r in records
-                                    ]
-                                    if moisture_values:
-                                        avg = sum(moisture_values) / len(moisture_values)
-                                        conn.sendall(f"The average moisture is: {avg}".encode())
-
-                                case "2":
-                                    key = "0a4-g7y-3jy-4w0"
-                                    records = data.get(key, [])
-                                    water_values = [
-                                        water_flow_gallons_process(r) for r in records
-                                    ]
-                                    if water_values:
-                                        avg = sum(water_values) / len(water_values)
-                                        conn.sendall(f"The average water flow is: {avg}".encode())
-
-                                case "3":
-                                    keys = ["09h-o4h-6ec-q99", "0a4-g7y-3jy-4w0", "178ca7ee-1e25-4941-aec8-f144a04b95a2"]
-                                    electricity = {}
-                                    for key in keys:
-                                        records = data.get(key, [])
-                                        values = [amperes_to_kilowatts_process(r, key) for r in records]
-                                        if values:
-                                            electricity[key] = sum(values) / len(values)
-
-                                    if electricity:
-                                        max_key = max(electricity, key=electricity.get)
-                                        max_val = electricity[max_key]
-                                        labels = {
-                                            "09h-o4h-6ec-q99": "the first fridge",
-                                            "0a4-g7y-3jy-4w0": "the dishwasher",
-                                            "178ca7ee-1e25-4941-aec8-f144a04b95a2": "the second fridge"
-                                        }
-                                        conn.sendall(
-                                            f"The maximum electricity consumption is: {labels[max_key]} with {max_val} kilowatts.".encode()
-                                        )
-
-                except Exception as e:
-                    print(f"Error: {e}")
-
-            conn.close()
             print("Connection closed.")
-
-    except ValueError:
-        print("Invalid port number.")
-    except socket.error as e:
-        print(f"Socket error: {e}")
 
 if __name__ == "__main__":
     start_server()

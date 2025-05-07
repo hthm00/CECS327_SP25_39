@@ -3,10 +3,8 @@ Template configuration file for the IoT server application.
 Copy this file to config.py and fill in your actual credentials.
 """
 
-# MongoDB Configuration
-MONGODB_CONNECTION_STRING = "your_mongodb_connection_string_here"
-MONGODB_DATABASE = "your_database_name"
-MONGODB_COLLECTION = "your_collection_name"
+# NeonDB Configuration
+NEONDB_CONNECTION_STRING = "your_neondb_connection_string_here"
 
 # Device IDs
 DEVICE_IDS = {

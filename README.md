@@ -74,7 +74,7 @@ The application settings are managed through the `config.py` file:
    - The `config.py` file is ignored by git (see `.gitignore`)
 
 2. Configuration options:
-   - MongoDB connection settings
+   - NeonDB connection settings
    - Device IDs
    - Sensor configurations
    - Conversion factors and constants
