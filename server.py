@@ -70,14 +70,14 @@ def handle_request(request, data):
         values = [relative_moisture(r) for r in data.get(key, [])]
         if values:
             avg = sum(values) / len(values)
-            return f"The average moisture is: {avg:.2f}"
+            return f"The average moisture is: {avg:.2f} percent"
 
     elif request == "2":  # Water Flow
         key = DEVICE_IDS["DISHWASHER"]
         values = [water_flow_gallons(r) for r in data.get(key, [])]
         if values:
             avg = sum(values) / len(values)
-            return f"The average water flow is: {avg:.2f}"
+            return f"The average water flow is: {avg:.2f} gallons per hour"
 
     elif request == "3":  # Electricity
         consumption = {}
@@ -99,7 +99,7 @@ def handle_request(request, data):
     return "Invalid request or no data available."
 
 
-def get_recent_sensor_data(hours=3):
+def get_recent_sensor_data(hours=None):
     """
     Queries the database for recent sensor data from the past `hours`.
 
@@ -109,15 +109,25 @@ def get_recent_sensor_data(hours=3):
     Returns:
         dict: Mapping of device UIDs to lists of records (dicts with payload and timestamp).
     """
-    cutoff = datetime.now() - timedelta(hours=hours)
-    query = """
-        SELECT payload, time
-        FROM "Table_virtual"
-        WHERE time > %s
-    """
+    query = """"""
+    if hours: 
+        query = """
+            SELECT payload, time
+            FROM "Table_virtual"
+            WHERE time > %s
+        """
+    else:
+        query = """
+            SELECT payload, time
+            FROM "Table_virtual"
+        """
     with psycopg2.connect(NEONDB_CONNECTION_STRING) as conn:
         with conn.cursor() as cursor:
-            cursor.execute(query, (cutoff,))
+            if hours:   
+                cutoff = datetime.now() - timedelta(hours=hours)
+                cursor.execute(query, (cutoff,))
+            else:
+                cursor.execute(query)
             rows = cursor.fetchall()
 
     data = defaultdict(list)
@@ -153,9 +163,18 @@ def start_server():
                     print(f"Received: {request}")
 
                     try:
-                        sensor_data = get_recent_sensor_data()
-                        response = handle_request(request, sensor_data)
-                        conn.sendall(response.encode('utf-8'))
+                        sensor_data = None
+                        if request == "1":
+                            sensor_data = get_recent_sensor_data(hours=3)
+                        else:
+                            sensor_data = get_recent_sensor_data()
+                        if sensor_data:
+                            response = handle_request(request, sensor_data)
+                            conn.sendall(response.encode('utf-8'))
+                        else:
+                            error_msg = "No data available."
+                            print(error_msg)
+                            conn.sendall(error_msg.encode('utf-8'))
                     except Exception as e:
                         error_msg = f"Error: {e}"
                         print(error_msg)
