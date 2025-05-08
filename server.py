@@ -70,14 +70,14 @@ def handle_request(request, data):
         values = [relative_moisture(r) for r in data.get(key, [])]
         if values:
             avg = sum(values) / len(values)
-            return f"The average moisture is: {avg:.2f}"
+            return f"The average moisture is: {avg:.2f}%"
 
     elif request == "2":  # Water Flow
         key = DEVICE_IDS["DISHWASHER"]
         values = [water_flow_gallons(r) for r in data.get(key, [])]
         if values:
             avg = sum(values) / len(values)
-            return f"The average water flow is: {avg:.2f}"
+            return f"The average water flow is: {avg:.2f}gph"
 
     elif request == "3":  # Electricity
         consumption = {}
