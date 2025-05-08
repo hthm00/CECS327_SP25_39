@@ -1,6 +1,6 @@
 # IoT Server Application
 
-This server application processes and analyzes data from various IoT devices in a household setting, including moisture sensors, water flow meters, and electricity consumption meters. It connects to a MongoDB database to store and retrieve device data.
+This server application processes and analyzes data from various IoT devices in a household setting, including moisture sensors, water flow meters, and electricity consumption meters. It connects to a PostgreSQL database to store and retrieve device data.
 
 ## Features
 
@@ -8,14 +8,14 @@ This server application processes and analyzes data from various IoT devices in 
 - Moisture level monitoring
 - Water flow rate calculation
 - Electricity consumption tracking
-- MongoDB database integration
+- PostgreSQL database integration using psycopg2
 - Socket-based client-server communication
 
 ## Prerequisites
 
 - Python 3.8 or higher
-- MongoDB Atlas account (or local MongoDB instance)
-- Network access to the MongoDB database
+- PostgreSQL database (local or remote)
+- Network access to the PostgreSQL database
 
 ## Installation
 
@@ -42,8 +42,7 @@ pip install -r requirements.txt
      cp config.example.py config.py
      ```
    - Edit `config.py` with your actual credentials and settings:
-     - MongoDB connection string
-     - Database and collection names
+     - PostgreSQL connection parameters (host, port, database, user, password)
      - Device IDs
      - Sensor configurations
    - Make sure to never commit your `config.py` file to version control
